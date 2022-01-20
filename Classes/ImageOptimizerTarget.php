@@ -203,7 +203,7 @@ class ImageOptimizerTarget implements TargetInterface
      */
     public function getPublicStaticResourceUri($relativePathAndFilename)
     {
-        $this->realTarget->getPublicStaticResourceUri($relativePathAndFilename);
+        return $this->realTarget->getPublicStaticResourceUri($relativePathAndFilename);
     }
 
     /**
