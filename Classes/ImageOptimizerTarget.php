@@ -18,8 +18,8 @@ use Flownative\ImageOptimizer\Domain\Model\OptimizedResourceRelation;
 use Flownative\ImageOptimizer\Domain\Repository\OptimizedResourceRelationRepository;
 use Flownative\ImageOptimizer\Service\OptimizerConfiguration;
 use Flownative\ImageOptimizer\Service\OptimizerService;
-use Neos\Eel\Exception as EelException;
 use Neos\Flow\Annotations as Flow;
+use Neos\Flow\Log\Utility\LogEnvironment;
 use Neos\Flow\Persistence\PersistenceManagerInterface;
 use Neos\Flow\ResourceManagement\CollectionInterface;
 use Neos\Flow\ResourceManagement\Exception as ResourceManagementException;
@@ -29,6 +29,7 @@ use Neos\Flow\ResourceManagement\ResourceMetaDataInterface;
 use Neos\Flow\ResourceManagement\Storage\StorageObject;
 use Neos\Flow\ResourceManagement\Target\Exception as TargetException;
 use Neos\Flow\ResourceManagement\Target\TargetInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  *
@@ -74,6 +75,12 @@ class ImageOptimizerTarget implements TargetInterface
      * @var OptimizedResourceRelationRepository
      */
     protected $optimizedResourceRelationRepository;
+
+    /**
+     * @Flow\Inject
+     * @var LoggerInterface
+     */
+    protected $logger;
 
     /**
      * @var TargetInterface
@@ -123,19 +130,14 @@ class ImageOptimizerTarget implements TargetInterface
      * Publishes the whole collection to this target
      *
      * @param CollectionInterface $collection The collection to publish
-     * @param callable $callback Function called after each resource publishing
+     * @param callable|null $callback Function called after each resource publishing
      * @return void
-     * @throws EelException
-     * @throws ResourceManagementException
      */
     public function publishCollection(CollectionInterface $collection, callable $callback = null)
     {
         /** @var StorageObject $resource */
         foreach ($collection->getObjects($callback) as $resource) {
-            if ($this->needsToBeOptimized($resource)) {
-                $optimizedResource = $this->optimizerService->optimize($resource->getStream(), $resource->getFilename(), $this->options['optimizedCollection'], $this->getOptimizerConfigurationForMediaType($resource->getMediaType()));
-                $this->prepareForPersistence($optimizedResource, $resource->getSha1(), $resource->getFilename());
-            }
+            $this->optimizeIfNeeded($resource);
         }
         $this->realTarget->publishCollection($collection, $callback);
     }
@@ -146,17 +148,26 @@ class ImageOptimizerTarget implements TargetInterface
      * @param PersistentResource $resource The resource to publish
      * @param CollectionInterface $collection The collection the given resource belongs to
      * @return void
-     * @throws EelException
      * @throws ResourceManagementException
      * @throws TargetException
      */
     public function publishResource(PersistentResource $resource, CollectionInterface $collection)
     {
-        if ($this->needsToBeOptimized($resource)) {
-            $optimizedResource = $this->optimizerService->optimize($resource->getStream(), $resource->getFilename(), $this->options['optimizedCollection'], $this->getOptimizerConfigurationForMediaType($resource->getMediaType()));
-            $this->prepareForPersistence($optimizedResource, $resource->getSha1(), $resource->getFilename());
-        }
+        $this->optimizeIfNeeded($resource);
         $this->realTarget->publishResource($resource, $collection);
+    }
+
+    private function optimizeIfNeeded(ResourceMetaDataInterface $resource): void
+    {
+        if ($this->needsToBeOptimized($resource)) {
+            try {
+                $optimizedResource = $this->optimizerService->optimize($resource->getStream(), $resource->getFilename(), $this->options['optimizedCollection'], $this->getOptimizerConfigurationForMediaType($resource->getMediaType()));
+                $this->prepareForPersistence($optimizedResource, $resource->getSha1(), $resource->getFilename());
+            } catch (\Exception $exception) {
+                // Ignore the error and use the original resource
+                $this->logger->warning(sprintf('Optimization of resource "%s" failed, using original, error: %s', $resource->getFilename(), $exception->getMessage()), LogEnvironment::fromMethodName(__METHOD__));
+            }
+        }
     }
 
     /**
