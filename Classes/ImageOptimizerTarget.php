@@ -110,7 +110,7 @@ class ImageOptimizerTarget implements TargetInterface
      * @param string $name Name of this target instance, according to the resource settings
      * @param array $options Options for this target
      */
-    public function __construct($name, array $options = [])
+    public function __construct(string $name, array $options = [])
     {
         $this->name = $name;
         $this->options = $options;
@@ -203,7 +203,7 @@ class ImageOptimizerTarget implements TargetInterface
      */
     public function getPublicStaticResourceUri($relativePathAndFilename)
     {
-        $this->realTarget->getPublicStaticResourceUri($relativePathAndFilename);
+        return $this->realTarget->getPublicStaticResourceUri($relativePathAndFilename);
     }
 
     /**
@@ -299,11 +299,11 @@ class ImageOptimizerTarget implements TargetInterface
      */
     public function persist(): void
     {
-        foreach (array_values($this->unpersistedObjects) as $unpersistedObject) {
+        foreach ($this->unpersistedObjects as $unpersistedObject) {
             $this->doctrinePersistence->persist($unpersistedObject);
         }
 
-        foreach (array_values($this->boundForRemoval) as $object) {
+        foreach ($this->boundForRemoval as $object) {
             $this->doctrinePersistence->remove($object);
         }
 
